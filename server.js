@@ -1,31 +1,76 @@
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const axios = require('axios');
-const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 3000;
+const template = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 
-// Request logging middleware
+const pages = {
+  approved: `
+    <h1>Bedankt voor je goedkeuring</h1>
+    <p class="accent">Thanks for your approval!</p>`,
+  incomplete: `
+    <h1>Deze link is niet compleet</h1>
+    <p>Mail naar contact@taxmate.nl als je vragen hebt.</p>
+    <p class="accent">This link is incomplete. Email contact@taxmate.nl if you have questions.</p>`,
+  failed: `
+    <h1>Je akkoord is niet verwerkt</h1>
+    <p>Probeer het later nog een keer, of mail naar contact@taxmate.nl.</p>
+    <p class="accent">Your approval did not go through. Please try again later or email contact@taxmate.nl.</p>`,
+};
+
+const confirmation = (dealId) => `
+    <h1>Ga je akkoord?</h1>
+    <p>Klik op de knop om akkoord te geven op wat we je hebben gemaild.</p>
+    <form method="post" action="/">
+      <input type="hidden" name="deal_id" value="${dealId}">
+      <button type="submit">Akkoord geven / Approve</button>
+    </form>
+    <p class="accent">Do you approve? Click the button to approve what we emailed you.</p>`;
+
+const render = (content) => template.replace('{{content}}', content);
+
+// Mail clients can leave invisible characters in the link. Only digits reach the page.
+const cleanDealId = (value) =>
+  typeof value === 'string' ? value.normalize('NFKC').replace(/\D/g, '') : '';
+
+app.disable('x-powered-by');
+
 app.use((req, res, next) => {
-    console.log(`Received ${req.method} request for ${req.url} from ${req.ip}`);
-    next();
+  res.set({
+    'Cache-Control': 'no-store',
+    'Referrer-Policy': 'no-referrer',
+    'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': "frame-ancestors 'none'",
+  });
+  res.on('finish', () => console.log(`${req.method} ${req.path} ${res.statusCode}`));
+  next();
 });
 
-app.get('/', async (req, res) => {
-  const { deal_id } = req.query;
+// Mail scanners open links before the customer does, so opening the page changes nothing.
+app.get('/', (req, res) => {
+  const dealId = cleanDealId(req.query.deal_id);
+  res.send(render(dealId ? confirmation(dealId) : pages.incomplete));
+});
 
-  // Trigger the webhook for every request with a deal_id
-  if (deal_id) {
-    try {
-      await axios.post('https://hooks.zapier.com/hooks/catch/14846189/3vgmv81/', { deal_id });
-      console.log(`Webhook triggered for deal_id ${deal_id}`);
-    } catch (error) {
-      console.error(`Failed to trigger webhook for deal_id ${deal_id}: ${error}`);
-    }
+app.post('/', express.urlencoded({ extended: false }), async (req, res) => {
+  const dealId = cleanDealId(req.body.deal_id);
+  if (!dealId) {
+    return res.status(400).send(render(pages.incomplete));
   }
 
-  res.sendFile(path.join(__dirname, 'index.html'));
+  try {
+    await axios.post(process.env.ZAPIER_HOOK_URL, { deal_id: dealId }, { timeout: 10000 });
+    res.send(render(pages.approved));
+  } catch (error) {
+    console.error(`Hook call failed: ${error.response?.status ?? error.code}`);
+    res.status(502).send(render(pages.failed));
+  }
 });
+
+app.use((req, res) => res.status(404).type('text/plain').send('Not found'));
 
 app.listen(port, () => {
   console.log(`Server is running on http://localhost:${port}`);

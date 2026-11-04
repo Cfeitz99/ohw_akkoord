@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta http-equiv="X-DNS-Prefetch-Control" content="off">
-  <title>Approval Confirmation</title>
+  <title>Akkoord geven</title>
   <link href="https://fonts.googleapis.com/css?family=Axiforma" rel="stylesheet"> 
   <style>
     body {
@@ -18,6 +19,8 @@
       height: 100vh;
       flex-direction: column;
       text-align: center;
+      padding: 0 16px;
+      box-sizing: border-box;
     }
 
     .logo img {
@@ -42,6 +45,17 @@
       font-size: smaller; /* Smaller font for the English translation */
     }
 
+    button {
+      font: inherit;
+      color: #ffffff;
+      background-color: #1f3c4e;
+      border: 0;
+      border-radius: 8px;
+      padding: 12px 24px;
+      margin: 16px 0;
+      cursor: pointer;
+    }
+
     @keyframes fadeInLogo {
       0% { opacity: 0; }
       100% { opacity: 1; }
@@ -52,7 +66,6 @@
   <div class="logo">
     <img src="https://139550101.fs1.hubspotusercontent-eu1.net/hub/139550101/hubfs/TaxMate_Full_Logo_Regular-2.png?width=1120&upscale=true&name=TaxMate_Full_Logo_Regular-2.png" alt="Company Logo">
   </div>
-  <h1>Bedankt voor je goedkeuring</h1>
-  <p class="accent">Thanks for your approval!</p>
+  {{content}}
 </body>
 </html>
