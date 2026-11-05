@@ -141,3 +141,75 @@ test('the logs hold method, path and status, never the id', async () => {
   assert.match(logs, /Hook call failed: 500/);
   assert.doesNotMatch(logs, /987654/);
 });
+
+test('the page brings its own font and images', async () => {
+  for (const file of ['Axiforma-Regular.woff2', 'Axiforma-SemiBold.woff2', 'Axiforma-Bold.woff2', 'TaxMate_Full_Logo_White.png', 'bg-lines.jpg']) {
+    const response = await fetch(`${page}/assets/${file}`);
+    assert.equal(response.status, 200, file);
+    await response.arrayBuffer();
+  }
+});
+
+test('lang=en shows English only, also on the way back from the click', async () => {
+  const html = await (await fetch(`${page}/?deal_id=123&lang=en`)).text();
+
+  assert.match(html, /<html lang="en">/);
+  assert.match(html, /Do you approve\?/);
+  assert.match(html, /name="lang" value="en"/);
+  assert.match(html, />Approve</);
+  assert.doesNotMatch(html, /Ga je akkoord\?/);
+
+  const thanks = await (await click({ deal_id: '123', ...EXTRA, lang: 'en' })).text();
+  assert.match(thanks, /Thanks for your approval/);
+  assert.doesNotMatch(thanks, /Bedankt/);
+});
+
+test('lang=nl shows Dutch only', async () => {
+  const html = await (await fetch(`${page}/?deal_id=123&lang=nl`)).text();
+
+  assert.match(html, /Ga je akkoord\?/);
+  assert.match(html, />Akkoord geven</);
+  assert.doesNotMatch(html, /Do you approve\?/);
+});
+
+test('without lang, or with anything else in it, the page shows both', async () => {
+  for (const query of ['', `&lang=${encodeURIComponent('"><script>')}`]) {
+    const html = await (await fetch(`${page}/?deal_id=123${query}`)).text();
+    assert.match(html, /Ga je akkoord\?/);
+    assert.match(html, /Do you approve\?/);
+    assert.match(html, /name="lang" value=""/);
+    assert.doesNotMatch(html, /<script>/);
+  }
+});
+
+test('the page says what to do when something is wrong, in the language of the link', async () => {
+  const dutch = await (await fetch(`${page}/?deal_id=123&lang=nl`)).text();
+  const english = await (await fetch(`${page}/?deal_id=123&lang=en`)).text();
+
+  assert.match(dutch, /Klopt er iets niet\?[\s\S]*mailto:contact@taxmate\.nl/);
+  assert.match(english, /Something wrong\?[\s\S]*mailto:contact@taxmate\.nl/);
+  assert.doesNotMatch(english, /Klopt er iets niet/);
+});
+
+test('the side panel and the steps fill the page, in the language of the link', async () => {
+  const dutch = await (await fetch(`${page}/?deal_id=123&lang=nl`)).text();
+  const english = await (await fetch(`${page}/?deal_id=123&lang=en`)).text();
+
+  assert.match(dutch, /class="steps"[\s\S]*Klopt\ alles\?\ Geef\ dan\ je\ akkoord\./);
+  assert.match(dutch, /alleen voor je administratie/);
+  assert.match(english, /class="steps"[\s\S]*Is\ everything\ correct\?\ Then\ give\ your\ approval\./);
+  assert.match(english, /only use your details/);
+  assert.doesNotMatch(english, /alleen voor je administratie/);
+  assert.doesNotMatch(dutch + english, /\{\{/);
+});
+
+test('the period from the mail shows on the page, and nothing else does', async () => {
+  const shown = await (await fetch(`${page}/?deal_id=123&lang=nl&period=${encodeURIComponent('3e kwartaal 2024')}`)).text();
+  const refused = await (await fetch(`${page}/?deal_id=123&lang=nl&period=${encodeURIComponent('<script>alert(1)</script>')}`)).text();
+
+  assert.match(shown, /class="period">3e kwartaal 2024/);
+  assert.match(shown, /Btw-aangifte/);
+  assert.match(shown, /Wij dienen de aangifte in/);
+  assert.doesNotMatch(refused, /<script>/);
+  assert.doesNotMatch(refused, /class="period"/);
+});
